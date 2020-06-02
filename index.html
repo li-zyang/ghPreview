@@ -6,9 +6,9 @@
   <meta name="format-detection" content="telephone=no, email=no">
 
   <!-- page config -->
-  <title>Github HTML viewer</title>
-  <link rel="icon" type="image/png" href="src/favicon-192x192.png" sizes="192x192">
-  <link rel="apple-touch-icon" href="src/apple-touch-icon-180x180.png" sizes="180x180">
+  <title class="js-set-text">${file} - ${user}/${repo}@${branch}</title>
+  <link rel="icon" type="image/png" href="src/favicon-dark-192x192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="src/apple-touch-icon-dark-180x180.png" sizes="180x180">
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 
   <!-- search infomation -->
@@ -31,7 +31,7 @@
 
   <!-- stylesheets & external scripts -->
   <link rel="stylesheet" href="mvp.css">
-  <link rel="stylesheet" href="https://at.alicdn.com/t/font_1826976_sns7bg354lq.css">
+  <link rel="stylesheet" href="https://at.alicdn.com/t/font_1826976_57o3hqwr039.css">
   <link rel="stylesheet" href="default.css">
   <script src="https://cdn.staticfile.org/jquery/3.4.1/jquery.min.js"></script>
   <script src="action.js"></script>
@@ -118,12 +118,28 @@
   </header>
   <div class="header-placeholder"></div>
   <main class="page-container">
-    <aside>
-      <details class="catalogue">
-        <summary class="catalogue-title"><i class="iconfont icon-caidan2 catalogue-title-icon"></i><span class="catalogue-title-text">目录</span></summary>
-      </details>
+    <aside class="left">
+      <div class="catalogue">
+        <div class="catalogue-title-wrapper">
+          <div class="catalogue-title"><i class="iconfont icon-caidan2 catalogue-title-icon"></i><span class="catalogue-title-text">目录</span></div>
+        </div>
+        <hr class="catalogue-divisor" />
+        <div class="catalogue-content">
+        </div>
+      </div>
     </aside>
     <iframe class="page-frame" src="about:blank"></iframe>
   </main>
+  <div class="se-toolbar">
+    <a class="large-toolicon top-button invalid">
+      <i class="iconfont icon-huidingbu toolicon"></i>
+    </a>
+    <a class="large-toolicon link-about">
+      <i class="iconfont icon-guanyu toolicon"></i>
+    </a>
+  </div>
+  <span class="Progress progress-pjax-loader position-fixed width-full js-pjax-loader-bar">
+    <span class="progress-pjax-loader-bar top-0 left-0" style="width: 0%;"></span>
+  </span>
 </body>
 </html>

@@ -1,0 +1,132 @@
+<script>
+function randomBool(possibility) {
+  return Math.random() < possibility;
+}
+
+var calledCount = 0;
+var previousCallTimeCode = null;
+window.checker = new ElasticInterval(function() {
+//   console.log([...window.checker.record]);
+  if (previousCallTimeCode == null) {
+    let now = Date.now();
+    console.log(`${calledCount.toString().padStart(4)} --- ${'#'.repeat(30)}`);
+    previousCallTimeCode = now;
+  } else {
+    let now = Date.now();
+    console.log(`${calledCount.toString().padStart(4)} ${(now - previousCallTimeCode).toString().padStart(3)} ${'#'.repeat(Math.round((now - previousCallTimeCode) / 100 * 30))}`);
+    previousCallTimeCode = now;
+  }
+  let possibility = 0;
+  if (calledCount < 200) {
+    possibility = 0.5;
+  } else if (calledCount < 400) {
+    possibility = 1;
+  } else if (calledCount < 600) {
+    possibility = 0.5;
+  } else if (calledCount == 600) {
+    previousCallTimeCode = null;
+    window.checker.pause();
+    console.log('paused.');
+    setTimeout(function() {
+      window.checker.start();
+    }, 500);
+  } else if (calledCount < 800) {
+    possibility = 0.4;
+  } else if (calledCount < 1000) {
+    possibility = 0.8;
+  } else {
+    window.checker.reset();
+    console.log('stopped.');
+  }
+  calledCount++;
+  return randomBool(possibility);
+});
+checker.start();
+</script>
+
+<script>
+function randomBool(possibility) {
+  return Math.random() < possibility;
+}
+
+var calledCount = 0;
+var previousCallTimeCode = null;
+var realCalledCount = 0;
+window.checker = new ElasticInterval(function() {
+  calledCount = Math.floor(realCalledCount / 10);
+  if (realCalledCount % 10 == 0) {
+    if (previousCallTimeCode == null) {
+      let now = Date.now();
+      console.log(`${calledCount.toString().padStart(4)} --- ${'#'.repeat(30)}`);
+      previousCallTimeCode = now;
+    } else {
+      let now = Date.now();
+      console.log(`${calledCount.toString().padStart(4)} ${(now - previousCallTimeCode).toString().padStart(3)} ${'#'.repeat(Math.round((now - previousCallTimeCode) / 1000 * 30))}`);
+      previousCallTimeCode = now;
+    }
+  }
+  let possibility = 0;
+  if (calledCount < 200) {
+    possibility = 0.5;
+  } else if (calledCount < 400) {
+    possibility = 1;
+  } else if (calledCount < 600) {
+    possibility = 0.5;
+  } else if (calledCount == 600) {
+    previousCallTimeCode = null;
+    window.checker.pause();
+    console.log('paused.');
+    setTimeout(function() {
+      window.checker.start();
+    }, 500);
+  } else if (calledCount < 800) {
+    possibility = 0.4;
+  } else if (calledCount < 1000) {
+    possibility = 0.8;
+  } else {
+    window.checker.reset();
+    console.log('stopped.');
+  }
+  realCalledCount++;
+  return randomBool(possibility);
+});
+checker.start();
+</script>
+
+<script>
+(async function testElasticInterval() {
+  let $root = $('.test-elastic-interval');
+  let lastCall = null;
+  let checker = new ElasticInterval(function() {
+    if (lastCall == null) {
+      lastCall = Date.now();
+    } else {
+      let now = Date.now();
+      // console.log('+ ' + (now - lastCall));
+      lastCall = now;
+    }
+    let left  = $root.find('.test-left');
+    let right = $root.find('.test-right');
+    let modified = false;
+    let lstyle = getComputedStyle(left[0]);
+    let rstyle = getComputedStyle(right[0]);
+    if (lstyle.width != rstyle.width) {
+      left.css('width', rstyle.width);
+      modified = true;
+    }
+    if (lstyle.height != rstyle.height) {
+      left.css('height', rstyle.height);
+      modified = true;
+    }
+    if (modified) {
+      lstyle = getComputedStyle(left[0]);
+      rstyle = getComputedStyle(right[0]);
+      left.text(`${lstyle.width.slice(0, -2)} x ${lstyle.height.slice(0, -2)}`);
+      right.text(`${rstyle.width.slice(0, -2)} x ${rstyle.height.slice(0, -2)}`);
+      return true;
+    } else {
+      return false;
+    }
+  }).start();
+})();
+</script>
