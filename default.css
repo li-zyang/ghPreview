@@ -345,7 +345,7 @@ text-expander {
 }
 main.page-container {
   width: 100%;
-  min-height: calc(100% - 55px); 
+  min-height: calc(100vh - 55px); 
   padding: 0px;
   margin: 0px;
   display: grid;

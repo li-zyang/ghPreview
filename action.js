@@ -20,11 +20,15 @@
 'use strict';
 
 function TimeoutError(what) {
-  let res = new Error();
-  res.name = 'TimeoutError';
-  res.message = (what || '');
-  return res;
+  Error.call(this, what);
+  this.name = 'TimeoutError';
+  // this.message = (what || '');
 }
+
+TimeoutError.prototype = Object.create(Error.prototype);
+TimeoutError.prototype.constructor = TimeoutError;
+
+// =====================================================================
 
 let Base64 = str => ({
   source: str, 
@@ -52,7 +56,7 @@ async function wait(discriminant, timeout) {
       // clearTimeout(prop.timeout);
       resolve(condition);
     } else if (timeout != undefined && (new Date).getTime() - prop.openTime > timeout) {
-      reject(TimeoutError('Timeout exceeded'));
+      reject(new TimeoutError('Timeout exceeded'));
     } else {
       setTimeout(poll, 0, resolve, reject);
     }
@@ -245,7 +249,8 @@ function setURLBase(relativeURL, base) {
 
 function processDocument(doc) {
   doc.ghPreviewProp = {}
-  if (doc.getElementsByTagName('style').length == 0) {
+  if (doc.getElementsByTagName('style').length == 0 && 
+      doc.querySelectorAll('link[rel~="stylesheet"]').length == 0) {
     let styleNode = doc.createElement('style');
     styleNode.innerHTML = defaultStyles.noany_light;
     doc.head.appendChild(styleNode);
@@ -380,6 +385,225 @@ function genID() {
   return ID;
 }
 
+async function loadPageContent(url, fromSourceInfo = false) {
+  window.processbar.start();
+  return new Promise(function(resolve, reject) {
+    if (!fromSourceInfo && (!window.sourceInfo.provider || url)) {
+      url = url || window.sourceInfo.source;
+      $.get(url)
+      .done(function(data) {
+        resolve(data);
+      })
+      .fail(function() {
+        let e = new TimeoutError('Timeout exceeded');
+        e.errorPage = dedentText(`
+          <html>
+          <head>
+            <style>
+              html, body {
+                margin: 0px;
+              }
+              body {
+                padding: 50px 75px;
+              }
+              pre {
+                font-size: 14px;
+                font-family: Consolas, Monaco, Lucida Console, Liberation Mono, DejaVu Sans Mono, 
+                             Bitstream Vera Sans Mono, Courier New, monospace;
+                white-space: pre-wrap;
+              }
+              a {
+                cursor: pointer;
+                color: #0000ee;
+                text-decoration: underline;
+              }
+            </style>
+          </head>
+          <body>
+            <pre>
+          Failed to load ${url}, please <a class="retry">retry</a>.
+            </pre>
+          </body>
+          <script>
+            document.getElementsByClassName('retry')[0]
+              .addEventListener('click', function() {
+                window.parent.loadPageContent();
+              })
+          </script>
+          </html>
+        `);
+        reject(e);
+      });
+    } else {
+      wait(() => window.sourceInfo.pageSource, 5000)
+      .then(async function(data) {
+        resolve(data);
+      })
+      .catch(async function(e) {
+        console.error(e);
+        if (e.name == 'TimeoutError') {
+          e.errorPage = dedentText(`
+            <html>
+            <head>
+              <style>
+                html, body {
+                  margin: 0px;
+                }
+                body {
+                  padding: 50px 75px;
+                }
+                pre {
+                  font-size: 14px;
+                  font-family: Consolas, Monaco, Lucida Console, Liberation Mono, DejaVu Sans Mono, 
+                               Bitstream Vera Sans Mono, Courier New, monospace;
+                  white-space: pre-wrap;
+                }
+                a {
+                  cursor: pointer;
+                  color: #0000ee;
+                  text-decoration: underline;
+                }
+              </style>
+            </head>
+            <body>
+              <pre>
+            The userscript takes too long to respond, please check if it was correctly installed and was enabled.
+            If everything has been done correctly, try <a class="reload">reloading the page</a> or <a class="report" href="https://github.com/li-zyang/zScripts/issues" target="_top" rel="noopener">report a bug</a>.
+              </pre>
+            </body>
+            <script>
+              document.getElementsByClassName('reload')[0]
+                .addEventListener('click', function() {
+                  window.parent.location.reload();
+                });
+            </script>
+            </html>
+          `);
+          reject(e);
+        } else {
+          e.errorPage = dedentText(`
+            <html>
+            <head>
+              <style>
+                html, body {
+                  margin: 0px;
+                }
+                body {
+                  padding: 50px 75px;
+                }
+                pre {
+                  font-size: 14px;
+                  font-family: Consolas, Monaco, Lucida Console, Liberation Mono, DejaVu Sans Mono, 
+                               Bitstream Vera Sans Mono, Courier New, monospace;
+                  white-space: pre-wrap;
+                }
+                a {
+                  cursor: pointer;
+                  color: #0000ee;
+                  text-decoration: underline;
+                }
+              </style>
+            </head>
+            <body>
+              <pre>
+            There's something wrong with this page. Try <a class="reload">reloading the page</a> or <a class="report" href="https://github.com/li-zyang/zScripts/issues" target="_top" rel="noopener">report a bug</a>.
+            For further infomation, please open the console.
+              </pre>
+            </body>
+            <script>
+              document.getElementsByClassName('reload')[0]
+                .addEventListener('click', function() {
+                  window.parent.location.reload();
+                });
+            </script>
+            </html>
+          `);
+          reject(e);
+        }
+      });
+    }
+  })
+  .then(function(data) {
+    processbar.flush();
+    delay(800).then(function() {
+      processbar.reset();
+    });
+    let parser = new DOMParser();
+    let doc = parser.parseFromString(data, 'text/html');
+    // Process page here
+    doc = processDocument(doc);
+    let frame = $('.page-frame')[0];
+    frame.style.width = doc.ghPreviewProp.viewportWidth;
+    frame.contentDocument.write('<!DOCTYPE html>' + doc.documentElement.outerHTML);
+    frame.contentDocument.close();
+    frame.style.height = null;
+    let checker = new ElasticInterval(function() {
+      let framePageHeight = $(frame.contentDocument).height().toString() + 'px';
+      let framePageWidth = $(frame.contentDocument).width().toString() + 'px';
+      let frameStyle = getComputedStyle(frame);
+      let modified = false;
+      if (frameStyle.width != framePageWidth) {
+        frame.style.width = framePageWidth;
+        modified = true;
+      }
+      if (frameStyle.height != framePageHeight) {
+        frame.style.height = framePageHeight;
+        modified = true;
+      }
+      return modified;
+    }).start();
+    window.catalogue.load();
+  })
+  .catch(function(e) {
+    processbar.flush();
+    delay(800).then(function() {
+      processbar.reset();
+    });
+    let frame = $('.page-frame')[0];
+    if (frame == undefined) {
+      console.error('Error on frame: got', $('.page-frame'));
+    }
+    frame.contentDocument.write(e.errorPage);
+    frame.contentDocument.close();
+    frame.style.height = null;
+  })
+}
+
+function dedentText(str) {
+  let splitted = str.split('\n');
+  let minSpaces = Infinity;
+  while (/^\s*$/.test(splitted[0])) {
+    splitted.shift();
+  }
+  while (/^\s*$/.test(splitted[splitted.length - 1])) {
+    splitted.pop();
+  }
+  for (let i = 0; i < splitted.length; i++) {
+    let line = splitted[i];
+    if (/^\s*$/.test(line)) {
+      continue;
+    }
+    let matched = /^\s*/.exec(line)[0];
+    if (matched.length < minSpaces) {
+      minSpaces = matched.length;
+    }
+  }
+  for (let i = 0; i < splitted.length; i++) {
+    let line = splitted[i];
+    splitted[i] = line.slice(minSpaces);
+  }
+  return splitted.join('\n');
+}
+
+function exit(code) {
+  const prevOnError = window.onerror;
+  window.onerror = () => {
+    window.onerror = prevOnError;
+    return true;
+  }
+  throw new Error(`Script termination with code ${code || 0}.`);
+}
+
 //======================================================================
 
 function Processbar() {
@@ -501,6 +725,14 @@ CatalogueElement.prototype.insert = function(index, item) {
   item.fillNode();
   return this;
 };
+
+CatalogueElement.prototype.clear = function() {
+  while (this._data.length) {
+    this.shift();
+  }
+  return this;
+}
+
 
 function CatalogueItem(title, href, rootNode, ...args) {
   CatalogueElement.call(this, rootNode, ...args);
@@ -727,6 +959,7 @@ Catalogue.prototype.load = function() {
   let frame = $('.page-frame')[0];
   let nodes = [...frame.contentDocument.documentElement.children].reverse();
   let container = this.data;
+  container.clear();
   container.hlevel = 0;
   let prev = null;
   while (nodes.length) {
@@ -891,6 +1124,14 @@ ElasticInterval.prototype.reset = function() {
 
 // =====================================================================
 
+if (window !== window.parent) {
+  console.log('Exit inside an iframe');
+  location = 'about:blank';
+  exit();
+}
+
+// =====================================================================
+
 ;(function parseUrlToken(search) {
   window.sourceInfo = {};
   if (search.startsWith('?')) {
@@ -997,205 +1238,7 @@ window.catalogue  = new Catalogue();
   })
 })();
 
-;(async function loadPageContent() {
-  if ((window.sourceInfo.provider || 'none') == 'none') {
-    window.load = async function(url) {
-      processbar.start();
-      
-      $.get(url)
-        .done(function(data) {
-        let parser = new DOMParser();
-        let doc = parser.parseFromString(data, 'text/html');
-        // process page data
-        doc = processDocument(doc);
-        let frame = $('.page-frame')[0];
-        frame.style.width = doc.ghPreviewProp.viewportWidth;
-        frame.contentDocument.write('<!DOCTYPE html>' + doc.documentElement.outerHTML);
-        frame.contentDocument.close();
-        let checker = new ElasticInterval(function() {
-          let framePageHeight = $(frame.contentDocument).height().toString() + 'px';
-          let framePageWidth = $(frame.contentDocument).width().toString() + 'px';
-          let frameStyle = getComputedStyle(frame);
-          let modified = false;
-          if (frameStyle.width != framePageWidth) {
-            frame.style.width = framePageWidth;
-            modified = true;
-          }
-          if (frameStyle.height != framePageHeight) {
-            frame.style.height = framePageHeight;
-            modified = true;
-          }
-          return modified;
-        }).start();
-        catalogue.load();
-      }).fail(function() {
-        let frame = $('.page-frame')[0];
-        frame.contentDocument.write(`
-<html>
-<head>
-  <style>
-    html, body {
-      margin: 0px;
-    }
-    body {
-      padding: 50px 75px;
-    }
-    pre {
-      font-size: 14px;
-      font-family: Consolas, Monaco, Lucida Console, Liberation Mono, DejaVu Sans Mono, 
-                   Bitstream Vera Sans Mono, Courier New, monospace;
-      white-space: pre-wrap;
-    }
-    a {
-      cursor: pointer;
-      color: #0000ee;
-      text-decoration: underline;
-    }
-  </style>
-</head>
-<body>
-  <pre>
-Failed to load ${url}, please <a class="retry">retry</a>.
-  </pre>
-</body>
-<script>
-  document.getElementsByClassName('retry')[0]
-    .addEventListener('click', function() {
-      window.parent.load(window.parent.sourceInfo.source);
-    })
-</script>
-</html>
-          `);
-        frame.contentDocument.close();
-      }).always(async function() {
-        processbar.flush();
-        delay(800).then(function() {
-          processbar.reset();
-        });
-      })
-    }
-    load(window.sourceInfo.source);
-  } else {
-    processbar.start();
-    wait(() => window.sourceInfo.pageSource, 5000)
-    .then(async function(code) {
-      let parser = new DOMParser();
-      let doc = parser.parseFromString(code, 'text/html');
-      // Process page here
-      doc = processDocument(doc);
-      let frame = $('.page-frame')[0];
-      frame.style.width = doc.ghPreviewProp.viewportWidth;
-      frame.contentDocument.write('<!DOCTYPE html>' + doc.documentElement.outerHTML);
-      frame.contentDocument.close();
-      processbar.flush();
-      delay(800).then(function() {
-        processbar.reset();
-      });
-      let checker = new ElasticInterval(function() {
-        let framePageHeight = $(frame.contentDocument).height().toString() + 'px';
-        let framePageWidth = $(frame.contentDocument).width().toString() + 'px';
-        let frameStyle = getComputedStyle(frame);
-        let modified = false;
-        if (frameStyle.width != framePageWidth) {
-          frame.style.width = framePageWidth;
-          modified = true;
-        }
-        if (frameStyle.height != framePageHeight) {
-          frame.style.height = framePageHeight;
-          modified = true;
-        }
-        return modified;
-      }).start();
-      catalogue.load();
-    })
-    .catch(async function(e) {
-      console.error(e);
-      let frame = $('.page-frame')[0];
-      if (frame == undefined) { console.error('Error on frame: got', $('.page-frame')); }
-      if (e.name == 'TimeoutError') {
-        frame.contentDocument.write(`
-    <html>
-    <head>
-      <style>
-        html, body {
-          margin: 0px;
-        }
-        body {
-          padding: 50px 75px;
-        }
-        pre {
-          font-size: 14px;
-          font-family: Consolas, Monaco, Lucida Console, Liberation Mono, DejaVu Sans Mono, 
-                       Bitstream Vera Sans Mono, Courier New, monospace;
-          white-space: pre-wrap;
-        }
-        a {
-          cursor: pointer;
-          color: #0000ee;
-          text-decoration: underline;
-        }
-      </style>
-    </head>
-    <body>
-      <pre>
-The userscript takes too long to respond, please check if it was correctly installed and was enabled.
-If everything has been done correctly, try <a class="reload">reloading the page</a> or <a class="report" href="https://github.com/li-zyang/zScripts/issues" target="_top" rel="noopener">report a bug</a>.
-      </pre>
-    </body>
-    <script>
-      document.getElementsByClassName('reload')[0]
-        .addEventListener('click', function() {
-          window.parent.location.reload();
-        });
-    </script>
-    </html>
-          `);
-      } else {
-        frame.contentDocument.write(`
-    <html>
-    <head>
-      <style>
-        html, body {
-          margin: 0px;
-        }
-        body {
-          padding: 50px 75px;
-        }
-        pre {
-          font-size: 14px;
-          font-family: Consolas, Monaco, Lucida Console, Liberation Mono, DejaVu Sans Mono, 
-                       Bitstream Vera Sans Mono, Courier New, monospace;
-          white-space: pre-wrap;
-        }
-        a {
-          cursor: pointer;
-          color: #0000ee;
-          text-decoration: underline;
-        }
-      </style>
-    </head>
-    <body>
-      <pre>
-There's something wrong with this page. Try <a class="reload">reloading the page</a> or <a class="report" href="https://github.com/li-zyang/zScripts/issues" target="_top" rel="noopener">report a bug</a>.
-For further infomation, please open the console.
-      </pre>
-    </body>
-    <script>
-      document.getElementsByClassName('reload')[0]
-        .addEventListener('click', function() {
-          window.parent.location.reload();
-        });
-    </script>
-    </html>
-          `);
-      }
-      frame.contentDocument.close();
-      processbar.flush();
-      await delay(800);
-      processbar.reset();
-    });
-  }
-})();
+loadPageContent();
 
 ;(async function handleCatalogueAnimation() {
   // screen width threshold: 1376px;
@@ -1269,7 +1312,7 @@ For further infomation, please open the console.
 })();
 
 ;(async function handleBackToTop() {
-  let topButton = $('.top-button');
+  let topButton = $('.se-toolbar .top-button');
   $(window).on('scroll', function(e) {
     let scrollTop = document.documentElement.scrollTop;
     if (scrollTop > 0.5 * $(window).height()) {
@@ -1293,7 +1336,28 @@ For further infomation, please open the console.
 })();
 
 ;(async function handleAbout() {
+  let aboutButton = $('.se-toolbar .link-about');
+  aboutButton.on('click', function() {
+    history.pushState({
+      pageData: '<!DOCTYPE html>' + $('.page-frame')[0].contentDocument.documentElement.outerHTML
+    }, 'previousPage');
+    loadPageContent('about.html');
+  });
+})();
 
+;(async function handleNavigation() {
+  $(window).on('popstate', function() {
+    if (history.state) {
+      let pageData = history.state.pageData;
+      if (pageData) {
+        window.sourceInfo.pageSource = pageData;
+        loadPageContent('', true);
+      }
+    }
+  });
+  $('.header-button.back-button').on('click', function() {
+    history.back();
+  });
 })();
 
 })
