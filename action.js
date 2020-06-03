@@ -153,6 +153,31 @@ function count(array, discriminant) {
 }
 
 function parseRelativeURL(raw) {
+  if (raw.startsWith('about:')) {
+    let _temp = raw.slice(6).split('?');
+    let pathname = _temp[0];
+    let search = '';
+    let hash = '';
+    if (_temp[1] && _temp != '') {
+      search = _temp[1];
+      _temp.shift();
+    }
+    _temp = _temp[0].split('#');
+    if (_temp[1] && _temp != '') {
+      hash = _temp[1];
+    }
+    return {
+      hash: hash,
+      host: '',
+      hostname: '',
+      href: raw,
+      origin: 'null',
+      pathname: pathname,
+      port: '',
+      protocol: 'about:',
+      search: search
+    };
+  }
   let fullPattern = /^(\w+:)?(\/\/[^\/\?#]+)?(\/?[^\?#]*)?(\?[^#]+)?(#.*)?/;
   let matched = null;
   if (matched = fullPattern.exec(raw)) {
@@ -208,14 +233,14 @@ function setURLBase(relativeURL, base) {
       res[key] = parsedBase[key];
     }
   }
-  if (res.pathname != null && !res.pathname.startsWith('/')) {
+  if (res.pathname != null && parsedBase.protocol != 'about:' && !res.pathname.startsWith('/')) {
     if (parsedBase.pathname) {
       res.pathname = parsedBase.pathname + (parsedBase.pathname.endsWith('/') ? '' : '/') + res.pathname;
     } else {
       res.pathname = '/' + res.pathname;
     }
   }
-  return res.protocol + '//' + res.username + (res.username != '' ? '@' : '') + res.host + res.pathname + res.search + res.hash;
+  return res.protocol + (res.protocol == 'about:' ? '' : '//') + (res.username || '') + ((res.username && res.username != '') ? '@' : '') + res.host + res.pathname + res.search + res.hash;
 }
 
 function processDocument(doc) {
@@ -250,9 +275,13 @@ function processDocument(doc) {
         `https://github.com/${window.sourceInfo.user}/${window.sourceInfo.repo}/raw/${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`
       ));
     }
+    if (!baseTag.attributes.target) {
+      baseTag.setAttribute('target', '_top');
+    }
   } else {
     baseTag = doc.createElement('base');
     baseTag.setAttribute('href', `https://github.com/${window.sourceInfo.user}/${window.sourceInfo.repo}/raw/${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`);
+    baseTag.setAttribute('target', '_top');
     doc.head.appendChild(baseTag);
   }
   let hyperlinks = doc.querySelectorAll('a');
@@ -260,11 +289,21 @@ function processDocument(doc) {
     // https://github.com/li-zyang/zScripts/blob/master/github-html-viewer/demo.html
     let linkNode = hyperlinks[i];
     let rawURL = linkNode.attributes.href.value;
-    if (rawURL && !parseRelativeURL(rawURL).hostname) {
-      linkNode.setAttribute('href', setURLBase(
-        rawURL,
-        `https://github.com/${window.sourceInfo.user}/${window.sourceInfo.repo}/blob/${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`
-      ));
+    if (rawURL) {
+      let parsed = parseRelativeURL(rawURL);
+      if (!parsed.hostname && !parsed.pathname && !parsed.search && parsed.hash != '') {
+        let base = new URL(location);
+        base.hash = '';
+        linkNode.setAttribute('href', setURLBase(
+          rawURL, 
+          base.toString()
+        ));
+      } else if (!parsed.hostname) {
+        linkNode.setAttribute('href', setURLBase(
+          rawURL,
+          `https://github.com/${window.sourceInfo.user}/${window.sourceInfo.repo}/blob/${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`
+        ));
+      }
     }
   }
   let scripts = doc.querySelectorAll('script');
@@ -277,6 +316,70 @@ function processDocument(doc) {
   return doc;
 }
 
+function getHeaderLevel(node) {
+  if (!(/^H[1-6]$/i.test(node.tagName))) {
+    return undefined;
+  }
+  return Number.parseInt(node.tagName.slice(1));
+}
+
+function checkSerial(str) {
+  let raw = str;
+  let serialPattern = {
+    simpCjkLeading : /^\s*((〇|零|一|二|三|四|五|六|七|八|九|十|百)+)(、|\.|\>|・|·|\)|）)\s*/,
+    tradCjkLeading : /^\s*((〇|零|壹|貳|叄|肆|伍|六|柒|捌|玖|拾|佰)+)(、|\.|\>|・|·|\)|）)\s*/,
+    simpCjkParenthesized : /^\s*(\(|（|\[|【|〖|〔|『|「)((〇|零|一|二|三|四|五|六|七|八|九|十|百)+)(\)|）|\]|】|〗|〕|』|」)(、|\.|\>|・|·|\)|）)?\s*/,
+    tradCjkParenthesized : /^\s*(\(|（|\[|【|〖|〔|『|「)((〇|零|壹|貳|叄|肆|伍|六|柒|捌|玖|拾|佰)+)(\)|）|\]|】|〗|〕|』|」)(、|\.|\>|・|·|\)|）)?\s*/,
+    decimalLeading       : /^\s*(\d+)(、|\.|\>|・|·|\)|）)\s*/,
+    decimalParenthesized : /^\s*(\(|（|\[|【|〖|〔|『|「)(\d+)(\)|）|\]|】|〗|〕|』|」)(、|\.|\>|・|·|\)|）)?\s*/,
+    lowerAlphaLeading       : /^\s*([a-z]+)(、|\.|\>|・|·|\)|）)\s*/,
+    lowerAlphaParenthesized : /^\s*(\(|（|\[|【|〖|〔|『|「)([a-z]+)(\)|）|\]|】|〗|〕|』|」)(、|\.|\>|・|·|\)|）)?\s*/,
+    upperAlphaLeading       : /^\s*([A-Z]+)(、|\.|\>|・|·|\)|）)\s*/,
+    upperAlphaParenthesized : /^\s*(\(|（|\[|【|〖|〔|『|「)([A-Z]+)(\)|）|\]|】|〗|〕|』|」)(、|\.|\>|・|·|\)|）)?\s*/,
+    lowerRomanLeading       : /^\s*([ivxlcdm]+)(、|\.|\>|・|·|\)|）)\s*/,
+    lowerRomanParenthesized : /^\s*(\(|（|\[|【|〖|〔|『|「)([ivxlcdm]+)(\)|）|\]|】|〗|〕|』|」)(、|\.|\>|・|·|\)|）)?\s*/,
+    upperRomanLeading       : /^\s*([IVXLCDM]+)(、|\.|\>|・|·|\)|）)\s*/,
+    upperRomanParenthesized : /^\s*(\(|（|\[|【|〖|〔|『|「)([IVXLCDM]+)(\)|）|\]|】|〗|〕|』|」)(、|\.|\>|・|·|\)|）)?\s*/,
+  }
+  let serialPrefix = [];
+  while (true) {
+    let found = false;
+    for (let i = 0; i < Object.entries(serialPattern).length; i++) {
+      let [name, pattern] = Object.entries(serialPattern)[i];
+      let matched = pattern.exec(str);
+      if (matched) {
+        serialPrefix.push({
+          str: matched[0],
+          type: name
+        });
+        str = str.slice(matched[0].length);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      break;
+    }
+  }
+  return {
+    raw: raw,
+    prefixes: serialPrefix,
+    content: str
+  };
+}
+
+function genID() {
+  let charMap = '0123456789abcdefghijklmnopqretuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let rawID = Number(Math.floor(Math.random() * Math.pow(2, 16)).toString() + Date.now().toString());
+  let ID = '';
+  while(rawID > 1) {
+    let rem = rawID % charMap.length;
+    rawID /= charMap.length;
+    ID += charMap.charAt(rem);
+  }
+  return ID;
+}
+
 //======================================================================
 
 function Processbar() {
@@ -286,7 +389,7 @@ function Processbar() {
 Processbar.prototype.start = function() {
   this.rootNode[0].style.width = '15%'
   $('.progress-pjax-loader').addClass('is-loading');
-  let obj = this
+  let obj = this;
   let timer = setInterval(function() {
     let currentWidth = Number(obj.rootNode[0].style.width.slice(0, -1));
     let nextWidth = currentWidth + 3;
@@ -294,7 +397,7 @@ Processbar.prototype.start = function() {
       nextWidth = 95;
       clearInterval(obj.interval);
     }
-    this.rootNode[0].style.width = nextWidth.toString() + '%';
+    obj.rootNode[0].style.width = nextWidth.toString() + '%';
   }, 500);
   this.interval = timer;
   return this;
@@ -322,6 +425,11 @@ function CatalogueElement(rootNode, ...args) {
   this.rootNode = (rootNode || null);
   this.parent = null;
   this._data = new Array(...args);
+  Object.defineProperty(this, 'length', {
+    get: function() {
+      return this._data.length;
+    }
+  });
 }
 
 CatalogueElement.prototype.get = function(index) {
@@ -615,6 +723,44 @@ Catalogue.prototype.stop = function(...args) {
   this.content.stop(...args);
 };
 
+Catalogue.prototype.load = function() {
+  let frame = $('.page-frame')[0];
+  let nodes = [...frame.contentDocument.documentElement.children].reverse();
+  let container = this.data;
+  container.hlevel = 0;
+  let prev = null;
+  while (nodes.length) {
+    let cur = nodes.pop();
+    let hlevel = getHeaderLevel(cur);
+    if (hlevel) {
+      if (!this.data.length) {
+        if (frame.contentDocument.querySelectorAll(cur.tagName).length > 1) {
+          let id = genID();
+          let item = new CatalogueItem(checkSerial(cur.innerText).content, '#' + id);
+          item.hlevel = hlevel;
+          container.push(item);
+          prev = item;
+          cur.setAttribute('data-title-id', id);
+        }
+      } else {
+        if (container.hlevel >= hlevel) {
+          while (container.hlevel >= hlevel) {
+            container = container.parent;
+          }
+        } else if (prev.hlevel < hlevel) {
+          container = prev;
+        }
+        let id = genID();
+        let item = new CatalogueItem(checkSerial(cur.innerText).content, '#' + id);
+        item.hlevel = hlevel;
+        container.push(item);
+        cur.setAttribute('data-title-id', id);
+      }
+    }
+    nodes = nodes.concat([...cur.children].reverse());
+  }
+};
+
 
 function ElasticInterval(callback, sampleInterval = 240, maxInterval = 150, minInterval = 0, factor = 1.1765) {
   this.callback = callback;
@@ -867,8 +1013,8 @@ window.catalogue  = new Catalogue();
         frame.contentDocument.write('<!DOCTYPE html>' + doc.documentElement.outerHTML);
         frame.contentDocument.close();
         let checker = new ElasticInterval(function() {
-        let framePageHeight = $(frame.contentDocument).height().toString() + 'px';
-        let framePageWidth = $(frame.contentDocument).width().toString() + 'px';
+          let framePageHeight = $(frame.contentDocument).height().toString() + 'px';
+          let framePageWidth = $(frame.contentDocument).width().toString() + 'px';
           let frameStyle = getComputedStyle(frame);
           let modified = false;
           if (frameStyle.width != framePageWidth) {
@@ -881,6 +1027,7 @@ window.catalogue  = new Catalogue();
           }
           return modified;
         }).start();
+        catalogue.load();
       }).fail(function() {
         let frame = $('.page-frame')[0];
         frame.contentDocument.write(`
@@ -959,6 +1106,7 @@ Failed to load ${url}, please <a class="retry">retry</a>.
         }
         return modified;
       }).start();
+      catalogue.load();
     })
     .catch(async function(e) {
       console.error(e);
@@ -991,7 +1139,7 @@ Failed to load ${url}, please <a class="retry">retry</a>.
     <body>
       <pre>
 The userscript takes too long to respond, please check if it was correctly installed and was enabled.
-If everything has been done correctly, try <a class="reload">reloading the page</a> or <a class="report" href="https://github.com/li-zyang/zScripts/issues" rel="noopener">report a bug</a>.
+If everything has been done correctly, try <a class="reload">reloading the page</a> or <a class="report" href="https://github.com/li-zyang/zScripts/issues" target="_top" rel="noopener">report a bug</a>.
       </pre>
     </body>
     <script>
@@ -1028,7 +1176,7 @@ If everything has been done correctly, try <a class="reload">reloading the page<
     </head>
     <body>
       <pre>
-There's something wrong with this page. Try <a class="reload">reloading the page</a> or <a class="report" href="https://github.com/li-zyang/zScripts/issues" rel="noopener">report a bug</a>.
+There's something wrong with this page. Try <a class="reload">reloading the page</a> or <a class="report" href="https://github.com/li-zyang/zScripts/issues" target="_top" rel="noopener">report a bug</a>.
 For further infomation, please open the console.
       </pre>
     </body>
@@ -1052,7 +1200,7 @@ For further infomation, please open the console.
 ;(async function handleCatalogueAnimation() {
   // screen width threshold: 1376px;
   catalogue.shink();
-  $('.catalogue-title').on('click', function(e) {
+  $('.catalogue-title-wrapper').on('click', function(e) {
     e.preventDefault();
     e.stopPropagation();
     if (catalogue.rootNode.hasClass('expanded')) {
@@ -1081,12 +1229,67 @@ For further infomation, please open the console.
   });
   $('.catalogue-content').on('click', 'summary a', function(e) {
     // console.log($(this).text());
+    location = $(this).attr('href');
     return false;
   });
+  $(window).on('hashchange', function(e) {
+    // console.log('hash changed');
+    let frame = $('.page-frame')[0];
+    let jumpTarget = location.hash.slice(1);
+    if (jumpTarget != '') {
+      let targetNode = null;
+      try {
+        targetNode = frame.contentDocument.querySelector(`#${jumpTarget}`);
+        if (targetNode) {
+          $('html').animate({
+            scrollTop: targetNode.offsetTop - 0.2 * $(window).height()
+          }, {
+            duration: 200
+          });
+          return false;
+        }
+      } catch(e) {
+        if (e.name == 'SyntaxError') {
+          ;
+        } else {
+          throw e;
+        }
+      }
+      targetNode = frame.contentDocument.querySelector(`[data-title-id="${jumpTarget}"]`);
+      if (targetNode) {
+        $('html').animate({
+          scrollTop: targetNode.offsetTop - 0.2 * $(window).height()
+        }, {
+          duration: 200
+        });
+        return false;
+      }
+    }
+  })
 })();
 
 ;(async function handleBackToTop() {
-
+  let topButton = $('.top-button');
+  $(window).on('scroll', function(e) {
+    let scrollTop = document.documentElement.scrollTop;
+    if (scrollTop > 0.5 * $(window).height()) {
+      if (topButton.hasClass('invalid')) {
+        topButton.removeClass('invalid');
+      }
+    } else {
+      if (!topButton.hasClass('invalid')) {
+        topButton.addClass('invalid');
+      }
+    }
+  });
+  topButton.on('click', function(e) {
+    $('html').animate({
+      scrollTop: 0
+    }, {
+      duration: 200
+    });
+    topButton.addClass('invalid');
+  });
 })();
 
 ;(async function handleAbout() {

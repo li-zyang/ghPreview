@@ -20,7 +20,7 @@ html, body {
   margin: 0px;
   padding: 0px;
   width: 100vw;
-  height: 100vh;
+  min-height: 100vh;
   background: #fafbfc;
 }
 details {
@@ -374,6 +374,7 @@ main.page-container .page-frame {
 .catalogue-title-wrapper {
   padding: 20px;
   width: 200px;
+  cursor: pointer;
 }
 .catalogue[open] .catalogue-title-wrapper {
   padding: 20px 20px 0px 20px;
@@ -398,6 +399,7 @@ main.page-container .page-frame {
 .catalogue-content {
   font-weight: normal;
   margin: 0px 20px 20px 20px;
+  max-width: 200px;
 }
 .catalogue.limited .catalogue-content {
   height: calc(100% - 85.2px);
@@ -407,6 +409,8 @@ main.page-container .page-frame {
   font-weight: inherit;
   pointer-events: none;
   position: relative;
+  max-width: 100%;
+  text-overflow: ellipsis;
 }
 .catalogue-content summary::marker {
   content: '';
@@ -444,6 +448,9 @@ main.page-container .page-frame {
   width: calc(100% - 1.6 * 9px - 5px);
   text-decoration: none;
   color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 .se-toolbar {
   position: fixed;
