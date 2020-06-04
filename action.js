@@ -30,24 +30,6 @@ TimeoutError.prototype.constructor = TimeoutError;
 
 // =====================================================================
 
-let Base64 = str => ({
-  source: str, 
-  encode: function() {
-    return window.btoa(
-      unescape(
-        encodeURIComponent(this.source)
-      )
-    );
-  }, 
-  decode: function() {
-    return decodeURIComponent(
-      escape(
-        window.atob(str)
-      )
-    );
-  }
-})
-
 async function wait(discriminant, timeout) {
   let prop = {};
   let res = new Promise(function poll(resolve, reject) {
@@ -1122,6 +1104,26 @@ ElasticInterval.prototype.reset = function() {
   return this;
 };
 
+function Base64() {
+
+}
+
+Base64.encode = function(str) {
+  return window.btoa(
+    unescape(
+      encodeURIComponent(str)
+    )
+  );
+}
+
+Base64.decode = function(str) {
+  return decodeURIComponent(
+    escape(
+      window.atob(str)
+    )
+  );
+}
+
 // =====================================================================
 
 if (window !== window.parent) {
@@ -1135,7 +1137,7 @@ if (window !== window.parent) {
 ;(function parseUrlToken(search) {
   window.sourceInfo = {};
   if (search.startsWith('?')) {
-    let splitted = Base64(search.slice(1)).decode().split('&');
+    let splitted = Base64.decode(search.slice(1)).split('&');
     let careAbout = ['originalUrl', 'source', 'repo', 'file', 'user', 
                      'avatar_url', 'authenticity_token', 'timestamp', 
                      'timestamp_secret', 'branch', 'provider'];
