@@ -370,7 +370,9 @@ function genID() {
 async function loadPageContent(url, fromSourceInfo = false) {
   window.processbar.start();
   return new Promise(function(resolve, reject) {
-    if (!fromSourceInfo && (!window.sourceInfo.provider || url)) {
+    if (!fromSourceInfo && 
+        (!window.sourceInfo.provider || (window.sourceInfo.provider == 'none') || url)
+    ) {
       url = url || window.sourceInfo.source;
       $.get(url)
       .done(function(data) {
