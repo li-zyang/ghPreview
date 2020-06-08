@@ -6,7 +6,7 @@
  * - provider: 'userscript' or 'none', the source code provider, default 
  *   to 'none'. If the 'provider' token is 'userscript', the page will 
  *   wait for the userscript to set window.sourceInfo.pageSource
- * - repo: the repository name
+ * - repo: the repository name (INCLUDING the reopsitory owner)
  * - branch: the branch name
  * - file: path to the file
  * - user: the name of this user
@@ -259,7 +259,7 @@ function processDocument(doc) {
     if (rawBaseURL && !parseRelativeURL(rawBaseURL).hostname) {
       baseTag.setAttribute('href', setURLBase(
         rawBaseURL, 
-        `https://github.com/${window.sourceInfo.user}/${window.sourceInfo.repo}/raw/${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`
+        `https://github.com/${window.sourceInfo.repo}/raw/${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`
       ));
     }
     if (!baseTag.attributes.target) {
@@ -267,7 +267,7 @@ function processDocument(doc) {
     }
   } else {
     baseTag = doc.createElement('base');
-    baseTag.setAttribute('href', `https://github.com/${window.sourceInfo.user}/${window.sourceInfo.repo}/raw/${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`);
+    baseTag.setAttribute('href', `https://github.com/${window.sourceInfo.repo}/raw/${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`);
     baseTag.setAttribute('target', '_top');
     doc.head.appendChild(baseTag);
   }
@@ -288,7 +288,7 @@ function processDocument(doc) {
       } else if (!parsed.hostname) {
         linkNode.setAttribute('href', setURLBase(
           rawURL,
-          `https://github.com/${window.sourceInfo.user}/${window.sourceInfo.repo}/blob/${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`
+          `https://github.com/${window.sourceInfo.repo}/blob/${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`
         ));
       }
     }
