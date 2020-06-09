@@ -237,6 +237,9 @@ function processDocument(doc) {
     styleNode.innerHTML = defaultStyles.noany_light;
     doc.head.appendChild(styleNode);
   }
+  let forcedStyle = doc.createElement('style');
+  forcedStyle.innerHTML = defaultStyles.forced;
+  doc.head.appendChild(forcedStyle);
   doc.ghPreviewProp.viewportWidth = '816px';
   let viewportTag = doc.querySelector('meta[name="viewport"]');
   if (viewportTag) {
@@ -465,43 +468,6 @@ async function loadPageContent(url, fromSourceInfo = false) {
           `);
           reject(e);
         } else {
-          e.errorPage = dedentText(`
-            <html>
-            <head>
-              <style>
-                html, body {
-                  margin: 0px;
-                }
-                body {
-                  padding: 50px 75px;
-                }
-                pre {
-                  font-size: 14px;
-                  font-family: Consolas, Monaco, Lucida Console, Liberation Mono, DejaVu Sans Mono, 
-                               Bitstream Vera Sans Mono, Courier New, monospace;
-                  white-space: pre-wrap;
-                }
-                a {
-                  cursor: pointer;
-                  color: #0000ee;
-                  text-decoration: underline;
-                }
-              </style>
-            </head>
-            <body>
-              <pre>
-            There's something wrong with this page. Try <a class="reload">reloading the page</a> or <a class="report" href="https://github.com/li-zyang/zScripts/issues" target="_top" rel="noopener">report a bug</a>.
-            For further infomation, please open the console.
-              </pre>
-            </body>
-            <script>
-              document.getElementsByClassName('reload')[0]
-                .addEventListener('click', function() {
-                  window.parent.location.reload();
-                });
-            </script>
-            </html>
-          `);
           reject(e);
         }
       });
@@ -522,17 +488,51 @@ async function loadPageContent(url, fromSourceInfo = false) {
     frame.contentDocument.close();
     frame.style.height = null;
     let checker = new ElasticInterval(function() {
+      if ($(frame).hasClass('no-change-width') && $(frame).hasClass('no-change-height')) {
+        return false;
+      }
       let framePageHeight = $(frame.contentDocument).height().toString() + 'px';
       let framePageWidth = $(frame.contentDocument).width().toString() + 'px';
       let frameStyle = getComputedStyle(frame);
       let modified = false;
-      if (frameStyle.width != framePageWidth) {
+      if (frameStyle.width != framePageWidth && !$(frame).hasClass('no-change-width')) {
         frame.style.width = framePageWidth;
         modified = true;
       }
-      if (frameStyle.height != framePageHeight) {
+      if (frameStyle.height != framePageHeight && !$(frame).hasClass('no-change-height')) {
         frame.style.height = framePageHeight;
         modified = true;
+      }
+      if (modified) {
+        let newPageHeight = $(frame.contentDocument).height().toString();
+        let newPageWidth = $(frame.contentDocument).width().toString();
+        let newStyle = getComputedStyle(frame);
+        let resetCount = 0;
+        if (!$(frame).hasClass('no-change-width') && 
+            (
+              (Number(newPageWidth) - Number(newStyle.width.slice(0, -2))) - 
+              (Number(framePageWidth.slice(0, -2)) - Number(frameStyle.width.slice(0, -2)))
+            ) > 0
+        ) {
+          frame.style.width = frameStyle.width;
+          $(frame).addClass('no-change-width');
+          resetCount++;
+          console.log('fixed frame width');
+        }
+        if (!$(frame).hasClass('no-change-height') && 
+            Math.abs(
+              (Number(newPageHeight) - Number(newStyle.height.slice(0, -2))) - 
+              (Number(framePageHeight.slice(0, -2)) - Number(frameStyle.height.slice(0, -2)))
+            ) > 0
+        ) {
+          frame.style.height = frameStyle.height;
+          $(frame).addClass('no-change-height');
+          resetCount++;
+          console.log('fixed frame height');
+        }
+        if (resetCount == 2) {
+          modified = false;
+        }
       }
       return modified;
     }).start();
@@ -546,6 +546,45 @@ async function loadPageContent(url, fromSourceInfo = false) {
     let frame = $('.page-frame')[0];
     if (frame == undefined) {
       console.error('Error on frame: got', $('.page-frame'));
+    }
+    if (e.name != 'TimeoutError') {
+      e.errorPage = dedentText(`
+        <html>
+        <head>
+          <style>
+            html, body {
+              margin: 0px;
+            }
+            body {
+              padding: 50px 75px;
+            }
+            pre {
+              font-size: 14px;
+              font-family: Consolas, Monaco, Lucida Console, Liberation Mono, DejaVu Sans Mono, 
+                           Bitstream Vera Sans Mono, Courier New, monospace;
+              white-space: pre-wrap;
+            }
+            a {
+              cursor: pointer;
+              color: #0000ee;
+              text-decoration: underline;
+            }
+          </style>
+        </head>
+        <body>
+          <pre>
+        There's something wrong with this page. Try <a class="reload">reloading the page</a> or <a class="report" href="https://github.com/li-zyang/zScripts/issues" target="_top" rel="noopener">report a bug</a>.
+        For further infomation, please open the console.
+          </pre>
+        </body>
+        <script>
+          document.getElementsByClassName('reload')[0]
+            .addEventListener('click', function() {
+              window.parent.location.reload();
+            });
+        </script>
+        </html>
+      `);
     }
     frame.contentDocument.write(e.errorPage);
     frame.contentDocument.close();
@@ -1367,8 +1406,8 @@ loadPageContent();
 })
 
 window.defaultStyles = {};
-defaultStyles.noany_light = 
-`* {
+defaultStyles.noany_light = dedentText(`
+* {
   scrollbar-width: none;
 }
 *::-webkit-scrollbar {
@@ -1507,4 +1546,12 @@ pre code {
 pre code, 
 pre code * {
   line-height: 1.5em;
-}`
+}`);
+defaultStyles.forced = dedentText(`
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+`);
