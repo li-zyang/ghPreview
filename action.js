@@ -440,7 +440,7 @@ async function loadPageContent(url, fromSourceInfo = false) {
         reject(e);
       });
     } else {
-      wait(() => window.sourceInfo.pageSource, 5000)
+      wait(() => window.sourceInfo.pageSource, 12000)
       .then(async function(data) {
         resolve(data);
       })
