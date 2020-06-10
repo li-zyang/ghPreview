@@ -139,7 +139,12 @@ function count(array, discriminant) {
 }
 
 function parseRelativeURL(raw) {
-  if (raw.startsWith('about:')) {
+  let unrequestableProtocols = ['about:', 'data:'];
+  let matchedProtocol = null; 
+  unrequestableProtocols.forEach(function(prefix) {
+    if (raw.startsWith(prefix)) matchedProtocol = prefix;
+  })
+  if (matchedProtocol) {
     let _temp = raw.slice(6).split('?');
     let pathname = _temp[0];
     let search = '';
@@ -160,8 +165,11 @@ function parseRelativeURL(raw) {
       origin: 'null',
       pathname: pathname,
       port: '',
-      protocol: 'about:',
-      search: search
+      protocol: matchedProtocol,
+      search: search,
+      username: '',
+      password: '',
+      searchParams: new URLSearchParams()
     };
   }
   let fullPattern = /^(\w+:)?(\/\/[^\/\?#]+)?(\/?[^\?#]*)?(\?[^#]+)?(#.*)?/;
@@ -212,21 +220,24 @@ function parseRelativeURL(raw) {
 function setURLBase(relativeURL, base) {
   let res = parseRelativeURL(relativeURL);
   let parsedBase = parseRelativeURL(base);
-  let keys = Object.keys(res);
-  for (let i = 0; i < keys.length; i++) {
-    let key = keys[i];
+  // let keys = Object.keys(res);
+  let orderedProperty = ['protocol', 'hostname', 'host', 'origin', 'pathname', 'search', 'hash'];
+  for (let i = 0; i < orderedProperty.length; i++) {
+    let key = orderedProperty[i];
     if (res[key] == null) {
       res[key] = parsedBase[key];
+    } else {
+      break;
     }
   }
-  if (res.pathname != null && parsedBase.protocol != 'about:' && !res.pathname.startsWith('/')) {
+  if (res.pathname != null && parsedBase.origin != 'null' && !res.pathname.startsWith('/')) {
     if (parsedBase.pathname) {
       res.pathname = parsedBase.pathname + (parsedBase.pathname.endsWith('/') ? '' : '/') + res.pathname;
     } else {
       res.pathname = '/' + res.pathname;
     }
   }
-  return res.protocol + (res.protocol == 'about:' ? '' : '//') + (res.username || '') + ((res.username && res.username != '') ? '@' : '') + res.host + res.pathname + res.search + res.hash;
+  return res.protocol + (res.origin == 'null' ? '' : '//') + (res.username || '') + ((res.username && res.username != '') ? '@' : '') + res.host + res.pathname + res.search + res.hash;
 }
 
 function processDocument(doc) {
@@ -260,9 +271,10 @@ function processDocument(doc) {
   if (baseTag) {
     let rawBaseURL = baseTag.attributes.href.value;
     if (rawBaseURL && !parseRelativeURL(rawBaseURL).hostname) {
+      // https://cdn.jsdelivr.net/gh/user/repo@branch/file
       baseTag.setAttribute('href', setURLBase(
         rawBaseURL, 
-        `https://github.com/${window.sourceInfo.repo}/raw/${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`
+        `https://cdn.jsdelivr.net/gh/${window.sourceInfo.repo}@${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`
       ));
     }
     if (!baseTag.attributes.target) {
@@ -270,9 +282,15 @@ function processDocument(doc) {
     }
   } else {
     baseTag = doc.createElement('base');
-    baseTag.setAttribute('href', `https://github.com/${window.sourceInfo.repo}/raw/${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`);
+    baseTag.setAttribute('href', `https://cdn.jsdelivr.net/gh/${window.sourceInfo.repo}@${window.sourceInfo.branch}/${window.sourceInfo.file.replace(/[^\/]*$/, '')}`);
     baseTag.setAttribute('target', '_top');
-    doc.head.appendChild(baseTag);
+    // doc.head.appendChild(baseTag);
+    let charsetMeta = doc.querySelector('meta[charset]');
+    if (charsetMeta) {
+      charsetMeta.after(baseTag);
+    } else {
+      doc.head.prepend(baseTag);
+    }
   }
   let hyperlinks = doc.querySelectorAll('a');
   for (let i = 0; i < hyperlinks.length; i++) {
